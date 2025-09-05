@@ -9,31 +9,43 @@
 local local_player, callback_reg, dt_charged = nil, false, false
 
  
+local tick_interval = globals.tickcount()
+if tick_interval == 0 then
+  
+    tick_interval = 0.01
+end
+
 local function toticks(seconds)
-    return math.floor(seconds / globals.curtime() + 0.5)
+    if seconds <= 0 then return 0 end
+    return math.floor(seconds / tick_interval + 0.5)
 end
 
 local function check_charge()
     if not local_player or not entity.is_alive(local_player) then return end
 
-    local m_nTickBase = entity.get_prop(local_player, 'm_nTickBase')
-    local client_latency = client.latency()
-    local server_tickrate = 128   
-    local latency_ticks = math.max(1, math.floor(client_latency / globals.tickinterval() + 0.5))
- 
-    local shift = math.floor(m_nTickBase - globals.tickcount() - 3 - toticks(client_latency) * 0.5 + 0.5 * (client_latency * 10))
-
- 
-    local fakelag_limit = ui.get(ref.doubletap.fakelag_limit) or 1
-    local wanted = -14 + (fakelag_limit - 1) + 3   
+   
+    local tickinterval = globals.tickinterval()
+    local tickcount = globals.tickcount()
+    local latency = client.latency()
+    local tickrate = 128   
 
   
-    dt_charged = shift <= wanted + 1  
+    local latency_ticks = math.floor(latency / tickinterval + 0.5)
+    if latency_ticks < 1 then latency_ticks = 1 end
 
     
-    if shift > wanted + 3 then
-        dt_charged = false
-    end
+    local tick_base = entity.get_prop(local_player, "m_nTickBase")
+    if not tick_base then return end
+
+  
+    local shift = tick_base - tickcount - 3 - latency_ticks
+
+     
+    local fakelag_limit = ui.get(ref.doubletap.fakelag_limit) or 1
+    local wanted = fakelag_limit - 12  
+
+    
+    dt_charged = shift <= wanted + 3   
 end
 
 local function rage_teleport(cmd)
@@ -43,7 +55,7 @@ local function rage_teleport(cmd)
     if not lp or not entity.is_alive(lp) then return end
 
  
-    local teleport_tick = globals.curtime() + 3   
+    local teleport_tick = globals.curtime()  
 
      
     cmd.tick_count = teleport_tick
@@ -51,7 +63,24 @@ local function rage_teleport(cmd)
    
 end
  
- 
+ local function on_shot()
+    local weapon = entity.get_player_weapon(local_player)
+    if not weapon then return end
+    if not rage_teleport then return end   
+    if not check_charge then return end   
+
+    local weapon_id = entity.get_prop(weapon, "m_iItemDefinitionIndex")
+    if not weapon_id then return end
+
+     
+    if last_weapon_id ~= weapon_id then
+        shots_fired = 1
+        last_weapon_id = weapon_id
+        return
+    end
+
+    shots_fired = shots_fired + 1
+end
  
 
 client.set_event_callback('setup_command', function()
@@ -154,18 +183,17 @@ local dt_ref = ui.reference("Rage", "Aimbot", "Double tap")
 
  
 local Bind_for_fd = ui.new_hotkey("Rage", "Other", "Bind_for_fd")       
-local Test = ui.new_hotkey("Rage", "Other", "Not working ")  
+ 
 
--- я тупой в бинд системе не разобрался по этому юзайте первый hotkey(Bind_for_fd)
- --I'm not good at the bind system, so use the first hotkey (Bind_for_fd)
+ 
 local dt_toggled = false
 local was_toggle_down = false
 
   
 client.set_event_callback("setup_command", function()
     local hold_down = ui.get(Bind_for_fd)         
-    local toggle_down = ui.get(Test)     
-    local toggle_pressed = toggle_down and not was_toggle_down   
+    
+    local toggle_pressed 
 
      
     local dt_active = false
@@ -184,5 +212,5 @@ client.set_event_callback("setup_command", function()
  
     ui.set(dt_ref, dt_active)
  
-    was_toggle_down = toggle_down
+  
 end)
